@@ -1,14 +1,14 @@
 # whack02-RadarSideQuest
 
 **Variant of [WHACK02-Radar](https://github.com/zheniannn/WHACK02-Radar).**
-Identical radar pipeline, with one extra step: every WHACK01 trajectory that
-lay *outside* the radar's 80 km coverage is rigidly relocated so its origin
-falls within 10 km of the site (stage 5b), then the radar stages run on that
-augmented set. This salvages the ~95% of GA flights the main pipeline never
-sees and produces a much denser scenario (~20k trajectories/day near the
-radar vs ~1.1k in coverage originally — a deliberate stress test, not a
-physically realistic traffic density). All outputs are isolated under
-`active/sidequest/` and `plot/sidequest/` so nothing collides with WHACK02.
+Identical radar pipeline, with one extra step: **every** WHACK01 trajectory
+is rigidly relocated so its origin falls at a random point within 10 km of
+the site (stage 5b), then the radar stages run on that set. Every GA flight
+in the survey now originates near the radar and fans outward, giving a very
+dense scenario (~20k trajectories/day vs ~1.1k in coverage originally — a
+deliberate stress test, not a physically realistic traffic density). All
+outputs are isolated under `active/sidequest/` and `plot/sidequest/` so
+nothing collides with WHACK02.
 
 
 2D radar measurement simulator built on the ground-truth conventional-GA
@@ -124,10 +124,9 @@ CLI: `--range-max-km`, `--threshold-min-db`, `--seed`, `--input-dir`, `--output`
 ## Stage 5b — `05b_relocate_trajectories.py`
 
 Reads the original WHACK01 trajectories and the frozen scenario, and writes
-a relocated per-day set: a trajectory whose closest approach to the site
-exceeds the 80 km instrumented range is **rigidly translated** so its first
-point lands at a uniformly random location within 10 km of the radar;
-in-coverage trajectories are copied unchanged. The translation is done in
+a relocated per-day set: **every** trajectory is **rigidly translated** so
+its first point lands at a uniformly random location within 10 km of the
+radar. The translation is done in
 metric ENU (each trajectory's own reference latitude forward, the site
 latitude back), so the aircraft's true motion — speeds, turns, path shape —
 is preserved exactly and only its geographic placement changes. Verified:

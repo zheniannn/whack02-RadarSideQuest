@@ -52,7 +52,7 @@ def main() -> None:
     if not files:
         raise FileNotFoundError(f"No source trajectory CSVs in {src_dir}")
 
-    print(f"Relocating out-of-coverage trajectories to within {RADIUS_M/1000:.0f} km of "
+    print(f"Relocating all trajectories to start within {RADIUS_M/1000:.0f} km of "
           f"({sc['site_lat_deg']}, {sc['site_lon_deg']})...")
     for i, name in enumerate(files):
         date = DATE_PATTERN.search(name).group(1)
@@ -62,9 +62,8 @@ def main() -> None:
         out, stats = relocate_day(df, sc["site_lat_deg"], sc["site_lon_deg"],
                                   sc["range_max_m"], rng)
         out.to_csv(os.path.join(out_dir, name), index=False)
-        print(f"  {date}: {stats['trajectories']} trajectories "
-              f"({stats['kept_in_coverage']} kept in coverage, "
-              f"{stats['relocated']} relocated) -> {name}")
+        print(f"  {date}: {stats['relocated']}/{stats['trajectories']} "
+              f"trajectories relocated -> {name}")
 
     print("\n05b_relocate_trajectories completed.")
 

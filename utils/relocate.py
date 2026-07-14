@@ -1,12 +1,9 @@
-"""Stage 5b rules: relocate out-of-coverage trajectories into the radar's
-neighbourhood.
+"""Stage 5b rules: relocate trajectories into the radar's neighbourhood.
 
-WHACK01 produces GA trajectories all over the survey region; only a small
-fraction pass within the radar's coverage. This variant salvages the rest:
-every trajectory whose closest approach to the site exceeds the instrumented
-range is rigidly translated so its FIRST point lands at a uniformly random
-location within RADIUS_M of the radar. Trajectories already in coverage are
-kept unchanged.
+WHACK01 produces GA trajectories all over the survey region. This variant
+rigidly translates EVERY trajectory so its FIRST point lands at a uniformly
+random location within RADIUS_M of the radar, giving a dense scenario in
+which every flight originates near the site and fans outward.
 
 The translation is done in metric ENU using each trajectory's OWN reference
 latitude for the forward conversion and the SITE latitude for the inverse,
@@ -36,55 +33,42 @@ def ground_range_m(lat, lon, site_lat, site_lon):
 
 def relocate_day(df: pd.DataFrame, site_lat: float, site_lon: float,
                  range_max_m: float, rng: np.random.Generator) -> dict:
-    """Return (relocated_df, stats). df is one day's trajectories."""
+    """Return (relocated_df, stats). Relocates EVERY trajectory so its first
+    point lands within RADIUS_M of the site. df is one day's trajectories."""
     df = df.copy()
     lat = df["lat_interp"].to_numpy()
     lon = df["lon_interp"].to_numpy()
 
-    # In/out-of-coverage decision: a trajectory is out iff its closest point
-    # to the site exceeds the instrumented range.
-    df["_grange"] = ground_range_m(lat, lon, site_lat, site_lon)
-    min_range = df.groupby("trajectory_id")["_grange"].transform("min")
-    out = (min_range > range_max_m).to_numpy()
+    tids = df["trajectory_id"].unique()
+    n_traj = len(tids)
 
-    n_traj = df["trajectory_id"].nunique()
-    out_tids = df.loc[out, "trajectory_id"].unique()
+    g = df.groupby("trajectory_id")
+    first_lat = g["lat_interp"].transform("first").to_numpy()
+    first_lon = g["lon_interp"].transform("first").to_numpy()
+    ref_lat = g["lat_interp"].transform("mean").to_numpy()
 
-    if len(out_tids):
-        g = df.groupby("trajectory_id")
-        first_lat = g["lat_interp"].transform("first").to_numpy()
-        first_lon = g["lon_interp"].transform("first").to_numpy()
-        ref_lat = g["lat_interp"].transform("mean").to_numpy()
+    # Trajectory shape in metres, relative to its own first point.
+    e_self = EARTH_RADIUS_M * np.cos(np.radians(ref_lat)) * np.radians(lon - first_lon)
+    n_self = EARTH_RADIUS_M * np.radians(lat - first_lat)
 
-        # Trajectory shape in metres, relative to its own first point.
-        e_self = EARTH_RADIUS_M * np.cos(np.radians(ref_lat)) * np.radians(lon - first_lon)
-        n_self = EARTH_RADIUS_M * np.radians(lat - first_lat)
+    # One random target origin per trajectory (uniform in the RADIUS_M disc).
+    r = RADIUS_M * np.sqrt(rng.uniform(size=n_traj))
+    th = rng.uniform(0, 2 * np.pi, size=n_traj)
+    target = {tid: (float(r[i] * np.sin(th[i])), float(r[i] * np.cos(th[i])))
+              for i, tid in enumerate(tids)}
+    tid_arr = df["trajectory_id"].to_numpy()
+    et = np.array([target[t][0] for t in tid_arr])
+    nt = np.array([target[t][1] for t in tid_arr])
 
-        # One random target origin per out-of-coverage trajectory (uniform in disc).
-        r = RADIUS_M * np.sqrt(rng.uniform(size=len(out_tids)))
-        th = rng.uniform(0, 2 * np.pi, size=len(out_tids))
-        target = {tid: (float(r[i] * np.sin(th[i])), float(r[i] * np.cos(th[i])))
-                  for i, tid in enumerate(out_tids)}
-        tid_arr = df["trajectory_id"].to_numpy()
-        et = np.array([target[t][0] if o else 0.0 for t, o in zip(tid_arr, out)])
-        nt = np.array([target[t][1] if o else 0.0 for t, o in zip(tid_arr, out)])
+    # New ENU relative to the site, then back to lat/lon using the SITE latitude.
+    new_lat = site_lat + np.degrees((nt + n_self) / EARTH_RADIUS_M)
+    new_lon = site_lon + np.degrees((et + e_self) / (EARTH_RADIUS_M * np.cos(np.radians(site_lat))))
 
-        # New ENU relative to the site, then back to lat/lon using the SITE latitude.
-        e_new = et + e_self
-        n_new = nt + n_self
-        new_lat = site_lat + np.degrees(n_new / EARTH_RADIUS_M)
-        new_lon = site_lon + np.degrees(e_new / (EARTH_RADIUS_M * np.cos(np.radians(site_lat))))
+    for c in LAT_COLS:
+        if c in df.columns:
+            df[c] = new_lat
+    for c in LON_COLS:
+        if c in df.columns:
+            df[c] = new_lon
 
-        for c in LAT_COLS:
-            if c in df.columns:
-                v = df[c].to_numpy().copy(); v[out] = new_lat[out]; df[c] = v
-        for c in LON_COLS:
-            if c in df.columns:
-                v = df[c].to_numpy().copy(); v[out] = new_lon[out]; df[c] = v
-
-    df = df.drop(columns="_grange")
-    return df, {
-        "trajectories": int(n_traj),
-        "relocated": int(len(out_tids)),
-        "kept_in_coverage": int(n_traj - len(out_tids)),
-    }
+    return df, {"trajectories": int(n_traj), "relocated": int(n_traj)}
