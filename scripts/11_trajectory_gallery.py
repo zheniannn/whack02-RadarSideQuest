@@ -66,16 +66,17 @@ def _features_and_path(e, n):
     turn_per_km = total_turn / (path / 1000 + 1e-6)
     feats = [straightness, np.log1p(path / 1000), np.log1p(total_turn),
              np.log1p(bbox / 1000), np.log1p(turn_per_km)]
+    raw = (straightness, path / 1000, total_turn)   # for data-driven labelling
 
     if len(e) > DOWNSAMPLE:
         idx = np.linspace(0, len(e) - 1, DOWNSAMPLE).astype(int)
         e, n = e[idx], n[idx]
-    return feats, np.column_stack([e, n]).astype(np.float32)
+    return feats, np.column_stack([e, n]).astype(np.float32), raw
 
 
 def load_all():
-    """Per-trajectory features + downsampled paths, pooled across days."""
-    rows, paths, days = [], [], []
+    """Per-trajectory features + downsampled paths + raw shape stats, pooled."""
+    rows, paths, days, raws = [], [], [], []
     for date in DATES:
         f = os.path.join(get_trajectories_dir(),
                          f"states_{date}_conventionalGA_trajectories_10s.csv")
@@ -89,29 +90,39 @@ def load_all():
             if en - s < 4:
                 continue
             e, n = _local_en(lat[s:en], lon[s:en])
-            feats, path = _features_and_path(e, n)
-            rows.append(feats); paths.append(path); days.append(date)
+            feats, path, raw = _features_and_path(e, n)
+            rows.append(feats); paths.append(path); days.append(date); raws.append(raw)
         del df
-    return np.array(rows), paths, np.array(days)
+    return np.array(rows), paths, np.array(days), np.array(raws)
 
 
-def label_clusters(km: KMeans):
-    """Heuristic semantic labels from cluster centroids (features:
-    straightness, log path, log turning, log bbox, log turn/km)."""
-    C = km.cluster_centers_
-    straight, logpath, logturn, _, logturnkm = C.T
+def describe_cluster(straightness: float, path_km: float, turn_deg: float) -> str:
+    """Label ONE cluster from the median shape of the trajectories in it --
+    data-driven, so the name reflects what the cluster actually contains.
+
+    Straightness (net displacement / path length) is the primary signal: a
+    transit runs roughly one way (~1.0); a circuit or airwork returns toward
+    its start (low). Total turning only separates single vs many loops among
+    the low-straightness ones -- it is unreliable for straight flights, which
+    accumulate gentle course wiggle without ever looping.
+    """
+    if straightness >= 0.9:
+        return "Long cross-country transit" if path_km >= 80 else "Direct transit"
+    if straightness >= 0.6:
+        return "Direct transit, light maneuvering"
+    if straightness >= 0.35:
+        return "Circuits + repositioning"
+    loops = turn_deg / 360.0                         # low straightness: it loops back
+    return f"Intensive airwork (~{loops:.0f} loops)" if loops >= 2.5 else "Racetrack / single circuit"
+
+
+def label_clusters(cluster_of: np.ndarray, raws: np.ndarray) -> dict:
+    """Median shape stats per cluster -> a descriptive label each."""
     names = {}
-    order = np.argsort(logturn)          # least -> most total turning
-    names[order[0]] = "Direct transit, light maneuvering" if straight[order[0]] > straight.mean() \
-        else "Long cross-country transit"
-    names[order[1]] = "Long cross-country transit" if names.get(order[0]) != "Long cross-country transit" \
-        else "Direct transit, light maneuvering"
-    names[order[-1]] = "Intensive airwork (many loops)"
-    # middle two: single circuit vs circuits+repositioning by straightness
-    mids = [i for i in range(N_CLUSTERS) if i not in (order[0], order[1], order[-1])]
-    mids = sorted(mids, key=lambda i: straight[i], reverse=True)
-    names[mids[0]] = "Racetrack / single circuit"
-    names[mids[1]] = "Circuits + repositioning"
+    for c in range(N_CLUSTERS):
+        m = raws[cluster_of == c]
+        s, p, t = np.median(m, axis=0)
+        names[c] = describe_cluster(float(s), float(p), float(t))
     return names
 
 
@@ -154,12 +165,17 @@ def render(paths, labels, cluster_of, members, title, out_path, rng):
 
 def main():
     print("Loading trajectories + shape features (pooled across 4 days)...")
-    X, paths, days = load_all()
+    X, paths, days, raws = load_all()
     print(f"  {len(X)} trajectories")
     Xs = (X - X.mean(0)) / (X.std(0) + 1e-9)
     km = KMeans(N_CLUSTERS, random_state=SEED, n_init=10).fit(Xs)
-    labels = label_clusters(km)
     cluster_of = km.labels_
+    labels = label_clusters(cluster_of, raws)
+    print("  cluster labels (data-driven):")
+    for c in range(N_CLUSTERS):
+        s, p, t = np.median(raws[cluster_of == c], axis=0)
+        print(f"    {labels[c]:36s} n={int((cluster_of==c).sum()):6d}  "
+              f"straight={s:.2f} path={p:.0f}km turn={t:.0f}deg")
     rng = np.random.default_rng(SEED)
     pdir = get_plot_dir()
 
