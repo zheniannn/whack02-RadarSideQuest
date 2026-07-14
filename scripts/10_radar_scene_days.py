@@ -14,12 +14,16 @@ frozen scenario.json. Style matches utils/plots.py.
 
 import json
 import os
+import sys
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.io import get_beam_crossings_dir, get_plot_dir, get_scenario_path
 
 DATES = ["2022-06-06", "2022-06-13", "2022-06-20", "2022-06-27"]
 # One distinct hue per day for the overlaid figure (orange is reserved for clutter).
@@ -29,12 +33,12 @@ DAY_COLORS = {
     "2022-06-20": "#8a4fbd",   # purple
     "2022-06-27": "#d1495b",   # crimson
 }
-SITE_NAME = "Phoenix/Mesa AZ"
+SITE_NAME = "Phoenix/Mesa AZ (relocated)"
 
-DATA_ROOT = "/home/tzhen/projects/WHACK/data/active"
-RADAR_DIR = os.path.join(DATA_ROOT, "radar")
-CROSSINGS_DIR = os.path.join(RADAR_DIR, "beam_crossings")
-PLOT_DIR = "/home/tzhen/projects/WHACK/data/plot"
+# Side-quest data + plot locations (all relocated trajectories).
+CROSSINGS_DIR = get_beam_crossings_dir()
+RADAR_DIR = os.path.dirname(get_scenario_path())
+PLOT_DIR = get_plot_dir()
 
 # Palette / rc lifted from utils/plots.py so these match the rest of stage 5-9.
 SURFACE = "#fcfcfb"; INK = "#0b0b0b"; INK2 = "#52514e"; MUTED = "#898781"
