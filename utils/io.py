@@ -67,5 +67,5 @@ def get_stage_dir(stage: int) -> str:
 
 
 def get_plot_dir() -> str:
-    """Figures directory (isolated under plot/sidequest/)."""
-    return os.path.join(get_data_root(), "plot", "sidequest")
+    """Figures directory (isolated under plot/whack02-RadarSideQuest/)."""
+    return os.path.join(get_data_root(), "plot", "whack02-RadarSideQuest")
