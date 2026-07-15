@@ -1,232 +1,134 @@
 # whack02-RadarSideQuest
 
-**Variant of [WHACK02-Radar](https://github.com/zheniannn/WHACK02-Radar).**
-Identical radar pipeline, with one extra step: **every** WHACK01 trajectory
-is rigidly relocated so its origin falls at a random point within 10 km of
-the site (stage 5b), then the radar stages run on that set. Every GA flight
-in the survey now originates near the radar and fans outward, giving a very
-dense scenario (~20k trajectories/day vs ~1.1k in coverage originally — a
-deliberate stress test, not a physically realistic traffic density). All
-outputs are isolated under `active/sidequest/` and `plot/sidequest/` so
-nothing collides with WHACK02.
+### WHACK02-Radar, but every flight is re-planted next to the radar
 
+*S-band · fan-beam · Swerling-1 · derived link budget · a dense in-coverage stress test*
 
-2D radar measurement simulator built on the ground-truth conventional-GA
-trajectories from
-[WHACK01-Preprocessing](https://github.com/zheniannn/WHACK01-Preprocessing).
-Stages 6–9 form a progressive-complexity ladder for studying track-based
-target-vs-clutter discrimination at low CFAR thresholds: stages 6/8 are
-clean (fixed vs radar-equation SNR), stages 7/9 add the contamination, so
-every effect in the figures has a single cause.
+A variant of [WHACK02-Radar](https://github.com/zheniannn/WHACK02-Radar). Same S-band radar, same physics, same progressive-complexity ladder — but a **stage 5b** first **rigidly translates every one of the ~82k WHACK01 trajectories** so its origin lands at a uniformly random point within **10 km** of the radar, preserving each flight's exact motion (speeds, turns, shape). The result is a **dense in-coverage scenario** where every flight originates near the site and fans outward.
 
-| Stage | SNR | Fluctuation | Meas. noise | False alarms | Clutter |
-|---|---|---|---|---|---|
-| 6 | fixed 15 dB | — | — | — | — |
-| 7 | fixed 15 dB | ✓ | ✓ | ✓ | ✓ |
-| 8 | radar equation (R⁻⁴) | — | — | — | — |
-| 9 | radar equation (R⁻⁴) | ✓ | ✓ | ✓ | ✓ |
+![Relocated radar scene](docs/figures/1_radar_scene_all_days.png)
 
-## Structure
+> **At a glance**
+> - WHACK02 has only ~1,250 trajectories/day *in coverage* (most GA flies outside 200 km of Phoenix). Relocation pulls **all ~19k/day into coverage** — a target field ~15× denser (**1.7 M target detections/day** vs ~100k).
+> - Identical radar: **15.0 dB operating anchor** from the S-band link budget, **74.8 km** deterministic horizon.
+> - Denser field, harder tracking: detection limit **70.7 km** (≈ WHACK02's 70.5), but tracking limit **36.8 km** (vs 43.1) — more crossing tracks break sooner.
 
-```
-WHACK02-Radar/
-├── requirements.txt
-├── scripts/
-│   ├── 05_radar_scenario.py          # stage 5: site + radar definition -> scenario.json
-│   ├── 05b_relocate_trajectories.py  # stage 5b: relocate out-of-coverage trajectories near the radar
-│   ├── 06_trajectories_clean.py      # stage 6: trajectories only, fixed SNR, no clutter/noise
-│   ├── 07_trajectories_cluttered.py  # stage 7: fixed SNR + clutter + noise
-│   ├── 08_trajectories_radar_equation.py # stage 8: radar-equation SNR, no clutter/noise
-│   └── 09_radar_equation_cluttered.py    # stage 9: radar-equation SNR + clutter + noise + max range
-└── utils/
-    ├── io.py                          # input/output path resolution
-    ├── geometry.py                    # geodetic -> ENU -> range/azimuth/elevation
-    ├── scenario.py                    # stage 5 rules: site, radar physics, scenario schema
-    ├── beam_crossings.py              # shared deterministic geometry (cached for stages 6-9)
-    ├── relocate.py                    # stage 5b rules: rigid ENU relocation
-    ├── measurements.py                # MeasurementConfig + the stochastic measurement layer
-    └── plots.py                       # shared PPI / max-range figures
+## What's different from WHACK02-Radar
+
+Everything downstream of the trajectories is identical (the `utils/` radar code and stages 6–9 are copied verbatim). The variant adds exactly two things and isolates its data:
+
+| Piece | Role |
+|---|---|
+| `scripts/05b_relocate_trajectories.py` + `utils/relocate.py` | **The relocation** — rigid ENU translation of every trajectory so its first point is uniformly within 10 km of the radar; motion is translation-invariant, so speeds/turns/shape are preserved exactly |
+| `scripts/11_trajectory_gallery.py` | Data-driven KMeans clustering of trajectory *shapes* into flight archetypes |
+| `utils/io.py` | All outputs isolated under `active/sidequest/` and `plot/whack02-RadarSideQuest/` so nothing collides with WHACK02 |
+
+Stage 5 selects the site and builds the real-flight detection figures from the **original** trajectories (into a separate `beam_crossings_source` cache), since relocation happens afterwards in 5b; stages 6–9 then run on the relocated set.
+
+```mermaid
+flowchart LR
+    T["WHACK01 trajectories"] --> S5["stage 5<br/>S-band scenario"]
+    T --> R["stage 5b<br/>relocate origins &lt; 10 km"]
+    S5 --> R
+    R --> BC["beam-crossing cache<br/>(relocated)"]
+    BC --> S6["6 · clean"] & S7["7 · +clutter/noise"] & S8["8 · horizon"] & S9["9 · full + 0 dB"]
 ```
 
-## Requirements
+## Quickstart
 
-Python ≥ 3.10:
+Python ≥ 3.9 with `numpy`, `pandas`, `matplotlib`, `scikit-learn`:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Data layout
-
-Same convention as WHACK01: the data root defaults to `data/` next to the
-repository (override with `WHACK_DATA_ROOT`).
-
-```
-<data root>/
-├── plot/sidequest/            # figures from all stages (isolated)
-└── active/
-    ├── trajectories_10s/      # WHACK01 stage 4 output (read-only source)
-    └── sidequest/
-        ├── trajectories_10s/  # stage 5b relocated set (stages 6-9 input)
-        └── radar/
-        ├── scenario.json      # stage 5 output
-        ├── beam_crossings/    # deterministic geometry cache (shared by 6-9)
-        ├── stage06/           # per-day truth + detections per stage
-        ├── stage07/
-        ├── stage08/
-        └── stage09/           #   ... + max_range_report.json
-```
-
-## Usage
+Data root defaults to `data/` beside the repo (override with `WHACK_DATA_ROOT`); WHACK01's `active/trajectories_10s/` must be present. Then:
 
 ```bash
-python scripts/05_radar_scenario.py          # site from the ORIGINAL trajectories
-python scripts/05b_relocate_trajectories.py  # build the relocated set (run before 6-9)
+python scripts/05_radar_scenario.py          # site + S-band link budget -> scenario.json + real-flight figures
+python scripts/05b_relocate_trajectories.py  # relocate every trajectory origin to within 10 km
 python scripts/06_trajectories_clean.py
 python scripts/07_trajectories_cluttered.py
 python scripts/08_trajectories_radar_equation.py
 python scripts/09_radar_equation_cluttered.py
+python scripts/10_radar_scene_days.py        # optional: relocated scene figures
+python scripts/11_trajectory_gallery.py      # optional: flight-shape gallery
 ```
 
-Whichever of stages 6–9 runs first computes the beam-crossing cache; the
-others reuse it (a fingerprint sidecar recomputes it automatically if the
-scenario's geometry changes).
+Every stage ends with a validation gate (Pd vs the Swerling-1 closed form, false-alarm rate within 5σ) that raises on failure.
 
----
+## The radar (unchanged from WHACK02)
 
-## Stage 5 — `05_radar_scenario.py`
+A 2D fan-beam **S-band** surveillance radar (2.8 GHz, 10 s scan, 1–200 km, 150 m × 1.5° cells). The 15 dB operating anchor is **derived from an explicit link budget**: single-pulse SNR from `Pt·G²·λ²·σ / ((4π)³·R⁴·kT₀BF·L)` (15 kW, 34 dBi, B = 1 MHz, NF = 4 dB, solved loss ≈ 9.3 dB) → ~0 dB at 50 km, lifted ≈ 15 dB by coherent integration of ~31 pulses/dwell. Detection is Swerling-1: `Pfa = e^(−τ)`, `Pd = Pfa^(1/(1+SNR))`.
 
-Defines the radar: location, settings, characteristics. Simulates nothing.
+The real-flight detection figures (N118AT, outbound 8 → 200 km) illustrate the range physics — relocation-independent, so built from the source flight:
 
-- **Site**: centre of the densest 0.25° traffic cell across all days
-  (density = sample count = dwell time) → Phoenix/Mesa, AZ. Site elevation
-  from the 1st percentile of nearby flight altitudes minus 150 m (terrain
-  proxy — no DEM).
-- **Radar model**: 2D fan-beam surveillance radar, 10 s scan, 1–80 km,
-  0.3–30° elevation fan, 150 m × 1.5° resolution cells, σ_range = 50 m,
-  σ_azimuth = 0.2° (≈ beamwidth/7.5, a standard monopulse fraction).
-- **Radar physics live on the `Scenario` class**: calibrated radar
-  equation (15 dB for 1 m² at 50 km, R⁻⁴), `Pfa(τ) = exp(−τ)`, Swerling-1
-  `Pd = Pfa^(1/(1+SNR))`. Later stages only apply this model.
-- **Clutter map**: 25 stationary patches (positions frozen here — ground
-  clutter doesn't move between days or between Monte-Carlo runs), mean
-  SNR 12 dB, within 40 km.
-- Everything is frozen into `scenario.json` with the RNG seed; all later
-  stages are reproducible functions of that file.
-- Emits an **A-scope** figure (`stage05_ascope.png`): echo amplitude vs
-  range along one synthesized beam, with the noise floor, the 8 dB CFAR
-  floor, a conventional ~13 dB threshold, a near and a marginal far target
-  (at mean echo power), and a clutter spike — the picture in which
-  "lowering the CFAR threshold in dB" is defined.
+![Echo vs distance](docs/figures/3_ascope_8db_distance.png)
 
-CLI: `--range-max-km`, `--threshold-min-db`, `--seed`, `--input-dir`, `--output`.
+![Flight track](docs/figures/3_flight_ppi.png)
 
-## Stage 5b — `05b_relocate_trajectories.py`
+The flight shapes the relocation preserves (data-driven clustering across all four days):
 
-Reads the original WHACK01 trajectories and the frozen scenario, and writes
-a relocated per-day set: **every** trajectory is **rigidly translated** so
-its first point lands at a uniformly random location within 10 km of the
-radar. The translation is done in
-metric ENU (each trajectory's own reference latitude forward, the site
-latitude back), so the aircraft's true motion — speeds, turns, path shape —
-is preserved exactly and only its geographic placement changes. Verified:
-relocated-set speed/turn statistics are identical to the source, and every
-trajectory now reaches coverage.
+![Trajectory shape gallery](docs/figures/2_trajectory_shapes_gallery.png)
 
-Run after stage 5 (needs the site) and before stages 6-9, which then read
-the relocated set. Reproducible from the scenario seed.
+## The ladder, in figures (on the relocated set)
 
-## Shared geometry — the beam-crossing cache
+**Stage 6 — trajectories alone**, fixed 15 dB, nothing stochastic — the dense relocated field, clean:
 
-A rotating beam hits a target at `scan_start + azimuth/360 × T`, where the
-azimuth itself depends on the target's position at that time (solved with
-two fixed-point iterations; GA targets move < 1 km per scan). Ground truth
-is interpolated to the crossing instant, never extrapolated. Coverage
-gating: slant range in [1, 80] km, elevation in the fan (altitude is used
-only for slant range and elevation — a 2D radar does not measure it). This
-is fully deterministic, so it's computed once into
-`radar/beam_crossings/` and shared by stages 6–9.
+![Stage 6 PPI](docs/figures/4_PPI_2022-06-06.png)
 
-## Stage 6 — `06_trajectories_clean.py`
+**Stage 7 — add contamination** (Swerling fluctuation, measurement noise, ~579 false alarms/scan over 318,240 cells, 25 clutter patches):
 
-**Aircraft trajectories only — no clutter, no noise — at a fixed SNR of
-15 dB.** Fluctuation, measurement noise, false alarms, and clutter are all
-off; 15 dB always clears the 8 dB floor, so every in-coverage beam
-crossing is recorded exactly. The output is the pure per-scan radar view
-of the trajectories, and the PPI figure shows clean tracks.
+![Stage 7 PPI](docs/figures/5_PPI_2022-06-06.png)
 
-Gate: every crossing detected; targets only; measurements identical to
-truth; `snr_db` exactly 15.
+**Stage 8 — the range limit alone** (radar-equation SNR, deterministic): the hard **74.8 km** horizon. Aircraft fan out to 200 km; the radar only detects inside the ring:
 
-## Stage 7 — `07_trajectories_cluttered.py`
+![Stage 8 coverage](docs/figures/6_PPI_2022-06-06.png)
 
-**Same fixed 15 dB SNR, now with clutter and noise.** Swerling-1
-fluctuation (Pd ≈ 0.82 at the 8 dB floor — *uniform at every range*),
-Gaussian measurement noise, Poisson false alarms over the 126,240 CFAR
-cells (~230/scan at 8 dB), and the 25 persistent clutter patches. The
-figure uses the same 15-minute window as stage 6, so the added
-contamination is the only difference.
+**Stage 9 — full physics.** 1.7 M target detections form a dense disk fading with range, buried in the noise field:
 
-Gate: Pd uniform across range bins and equal to the fixed-SNR closed form;
-false-alarm rate within 5σ of theory; measurement σs reproduced.
+![Stage 9 PPI](docs/figures/7_PPI_2022-06-06.png)
 
-`--seed` re-rolls the stochastic layer (Monte Carlo) without recomputing
-geometry.
+![Max range](docs/figures/7_max_range.png)
 
-## Stage 8 — `08_trajectories_radar_equation.py`
+- **Detection limit 70.7 km** (single-scan Pd = 0.5; closed form 70.3 km)
+- **Tracking limit 36.8 km** (50 % of tracks broken by a ≥ 3-scan gap)
 
-**Radar-equation SNR, no clutter or noise.** With fluctuation and noise
-off, detection is deterministic: a crossing is recorded iff its mean SNR
-clears the 8 dB floor, i.e. iff its range is within the closed-form
-detection horizon `R = range_ref · (snr_ref/τ)^(1/4)` ≈ **74.8 km**. The
-figure shows clean tracks ending exactly at that ring — the radar
-equation's range limit isolated from every stochastic effect.
+Detection matches WHACK02 (same radar), but the tracking limit is **lower** (36.8 vs 43.1 km): with ~15× more targets crossing at all ranges, more tracks pick up a fatal miss gap sooner. The RTI shows targets sloping with range rate through the clutter/noise:
 
-Gate: detection ≡ (range ≤ horizon) exactly; targets only; measurements
-identical to truth; `snr_db` equals the radar equation.
+![Stage 9 RTI](docs/figures/7_RTI_2022-06-06.png)
 
-## Stage 9 — `09_radar_equation_cluttered.py`
+**The 0 dB experiment.** Drop the CFAR floor to 0 dB: horizon jumps to 118.6 km (detection limit 146 km, tracking 56 km) — but at ~117,000 false alarms/scan, single-scan detection is hopeless. The motivation for track-based discrimination:
 
-**Full physics: SNR from the radar equation, with clutter and noise.**
-Distant targets fade under the R⁻⁴ law (Pd ≈ 1.0 near, ~0.34 at 80 km),
-and the stage answers: *what is the maximum range before the radar drops
-an aircraft trajectory?* Two limits are computed and written to
-`max_range_report.json`:
+![0 dB flood](docs/figures/8_0db_PPI.png)
 
-- **Detection limit** — the range where single-scan Pd falls to 0.5
-  (empirical, checked against the closed form).
-- **Tracking limit** — the range where 50% of tracks contain a gap of ≥ 3
-  consecutive missed scans (a simple track-drop proxy: most trackers coast
-  only a couple of scans before deleting a track).
+## Repository layout
 
-Gates: Pd tracks the Swerling-1 closed form per range bin; false-alarm
-rate within 5σ. Figures: the same 15-minute PPI window as stages 6–8, and
-the max-range analysis (Pd vs range + broken-track fraction vs range with
-both limits marked). Note how the stochastic limits (70.5 / 39 km) sit
-inside stage 8's deterministic 74.8 km horizon — fluctuation, not the
-radar equation alone, is what actually breaks tracks.
+```
+scripts/
+├── 05_radar_scenario.py               # site (source) + link budget -> scenario.json + real-flight figures
+├── 05b_relocate_trajectories.py       # relocate every trajectory origin to within 10 km
+├── 06..09_*.py                        # the ladder (identical to WHACK02, on the relocated set)
+├── 10_radar_scene_days.py             # relocated scene figures per day
+└── 11_trajectory_gallery.py           # flight-shape clustering gallery
+utils/
+├── io.py                # paths, isolated under active/sidequest & plot/whack02-RadarSideQuest
+├── relocate.py          # the rigid ENU relocation
+├── scenario.py          # the radar: S-band link budget, waveform, Swerling-1 (shared with WHACK02)
+├── geometry.py · beam_crossings.py · measurements.py · plots.py   # shared with WHACK02
+docs/figures/            # README images
+```
 
-All detections carry their measured `snr_db` down to the 8 dB floor, so
-any CFAR threshold ≥ the floor can be applied post-hoc by filtering —
-one dataset supports a full ROC sweep.
+## Data layout
 
-## Outputs (per stage, per day)
-
-- `radar_truth_<date>.csv` — every beam crossing with measured SNR and
-  detection outcome (the Pd denominator).
-- `radar_detections_<date>.csv` — what a tracker sees: `scan_idx`, `t`,
-  `range_m`, `azimuth_deg`, `snr_db`, `source` (`target`/`noise`/`clutter`),
-  plus truth linkage for evaluation only.
-- `measurements_summary.csv` — one row per day.
-- Figures in `<data root>/plot/`: every stage emits a PPI view of the same
-  15-minute window; stages 7 and 9 additionally emit a **B-scope**
-  (range vs azimuth, the radar's native frame) and an **RTI** (range vs
-  time over 60 min, where targets slope with range rate, clutter draws
-  flat lines, and noise speckles); stage 9 adds the max-range analysis.
-
-## Extending
-
-All radar physics: `utils/scenario.py`. Geometry: `utils/beam_crossings.py`.
-Stochastic layer and stage recipes (`MeasurementConfig`):
-`utils/measurements.py`. The scenario JSON is the single source of truth —
-edit it (or rerun stage 5 with flags) and rerun stages 6–9.
+```
+<data root>/active/
+├── trajectories_10s/                 # WHACK01 stage 4 output (read-only source)
+└── sidequest/
+    ├── trajectories_10s/             # stage 5b relocated set (stages 6-9 input)
+    └── radar/
+        ├── scenario.json
+        ├── beam_crossings/           # relocated-set cache (stages 6-9)
+        ├── beam_crossings_source/    # source-flight cache (stage 5 figures only)
+        └── stage06..09/
+```

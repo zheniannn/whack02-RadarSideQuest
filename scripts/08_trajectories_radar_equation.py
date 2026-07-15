@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.beam_crossings import ensure_beam_crossings
 from utils.io import get_beam_crossings_dir, get_plot_dir, get_scenario_path, get_stage_dir, get_trajectories_dir
 from utils.measurements import MeasurementConfig, run_days
-from utils.plots import densest_window, plot_detection_window
+from utils.plots import plot_bscope_coverage, plot_coverage, plot_rti_coverage
 from utils.scenario import Scenario
 
 PLOT_DAY_INDEX = 0
@@ -90,14 +90,24 @@ def main() -> None:
           f"{sc.range_max_m / 1000:.0f} km)")
 
     date, _ = day_files[PLOT_DAY_INDEX]
-    k0 = densest_window(os.path.join(get_beam_crossings_dir(), f"beam_crossings_{date}.csv"))
-    plot_detection_window(
-        results[PLOT_DAY_INDEX]["_dets"], k0, 90, sc.range_max_m / 1000,
-        f"Stage 8 — radar-equation SNR, no clutter or noise ({date}, 15 min)\n"
-        "clean tracks end exactly at the deterministic detection horizon",
-        os.path.join(get_plot_dir(), f"stage08_trajectories_{date}.png"),
-        horizon_km=horizon_m / 1000)
-    print(f"plot written to: {os.path.join(get_plot_dir(), f'stage08_trajectories_{date}.png')}")
+    truth0 = results[PLOT_DAY_INDEX]["_truth"]
+    scan_t0, _ = scan_grid[date]
+    plot_coverage(
+        truth0, sc.range_max_m / 1000, horizon_m / 1000,
+        f"Stage 8 PPI — truth vs detected ({date}, full day)\n"
+        "aircraft ARE out to 200 km; the radar only detects inside the horizon",
+        os.path.join(get_plot_dir(), f"6_PPI_{date}.png"))
+    plot_bscope_coverage(
+        truth0, sc.range_max_m / 1000,
+        f"Stage 8 B-scope — truth vs detected ({date}, full day)\n"
+        f"detected inside the {horizon_m/1000:.0f} km horizon; grey aircraft are there but unseen",
+        os.path.join(get_plot_dir(), f"6_bscope_{date}.png"))
+    plot_rti_coverage(
+        truth0, scan_t0, sc.scan_period_s, sc.range_max_m / 1000,
+        f"Stage 8 RTI — truth vs detected ({date}, full day)\n"
+        f"detected inside the {horizon_m/1000:.0f} km horizon; grey aircraft are there but unseen",
+        os.path.join(get_plot_dir(), f"6_RTI_{date}.png"))
+    print(f"plots written to: {get_plot_dir()} (PPI, B-scope, RTI)")
 
     print("\n08_trajectories_radar_equation completed successfully.")
 

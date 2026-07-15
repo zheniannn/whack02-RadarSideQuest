@@ -22,7 +22,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+# Make utils/ importable regardless of the caller's working directory.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from utils.io import get_beam_crossings_dir, get_plot_dir, get_scenario_path
 
 DATES = ["2022-06-06", "2022-06-13", "2022-06-20", "2022-06-27"]
@@ -33,11 +35,9 @@ DAY_COLORS = {
     "2022-06-20": "#8a4fbd",   # purple
     "2022-06-27": "#d1495b",   # crimson
 }
-SITE_NAME = "Phoenix/Mesa AZ (relocated)"
+SITE_NAME = "Phoenix/Mesa AZ (relocated set)"
 
-# Side-quest data + plot locations (all relocated trajectories).
 CROSSINGS_DIR = get_beam_crossings_dir()
-RADAR_DIR = os.path.dirname(get_scenario_path())
 PLOT_DIR = get_plot_dir()
 
 # Palette / rc lifted from utils/plots.py so these match the rest of stage 5-9.
@@ -101,7 +101,7 @@ def draw_scene(ax, date, paths, n_traj, range_max_km, color=C_TARGET,
 
 
 def main():
-    with open(os.path.join(RADAR_DIR, "scenario.json")) as f:
+    with open(get_scenario_path()) as f:
         sc = json.load(f)
     range_max_km = sc["range_max_m"] / 1000.0
 
