@@ -15,20 +15,14 @@ still valid and are carried through untouched.
 import numpy as np
 import pandas as pd
 
-EARTH_RADIUS_M = 6_371_000.0
+from .geometry import EARTH_RADIUS_M
+
 RADIUS_M = 10_000.0        # relocated origins fall uniformly within this of the site
 
 # Position columns to translate (WHACK01 stage-4 schema). Everything else --
 # altitude, motion channels, metadata -- is translation-invariant.
 LAT_COLS = ["lat_interp", "lat_smooth"]
 LON_COLS = ["lon_interp", "lon_smooth"]
-
-
-def ground_range_m(lat, lon, site_lat, site_lon):
-    """Flat-earth ground range from the site (matches the radar's ENU model)."""
-    e = EARTH_RADIUS_M * np.cos(np.radians(site_lat)) * np.radians(lon - site_lon)
-    n = EARTH_RADIUS_M * np.radians(lat - site_lat)
-    return np.hypot(e, n)
 
 
 def relocate_day(df: pd.DataFrame, site_lat: float, site_lon: float,

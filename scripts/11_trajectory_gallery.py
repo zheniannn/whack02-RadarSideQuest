@@ -28,13 +28,13 @@ import pandas as pd
 from sklearn.cluster import KMeans
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.geometry import EARTH_RADIUS_M
 from utils.io import get_plot_dir, get_trajectories_dir
 
 DATES = ["2022-06-06", "2022-06-13", "2022-06-20", "2022-06-27"]
 N_CLUSTERS = 5
 N_EXEMPLARS = 6
 DOWNSAMPLE = 60          # points kept per trajectory for plotting
-EARTH_R = 6_371_000.0
 SEED = 20220606
 
 SURFACE = "#fcfcfb"; INK = "#0b0b0b"; INK2 = "#52514e"; MUTED = "#898781"; GRID = "#e1e0d9"
@@ -48,8 +48,8 @@ plt.rcParams.update({
 def _local_en(lat, lon):
     """Local ENU metres relative to the trajectory's own centroid."""
     lat0 = lat.mean()
-    e = EARTH_R * np.cos(np.radians(lat0)) * np.radians(lon - lon.mean())
-    n = EARTH_R * np.radians(lat - lat0)
+    e = EARTH_RADIUS_M * np.cos(np.radians(lat0)) * np.radians(lon - lon.mean())
+    n = EARTH_RADIUS_M * np.radians(lat - lat0)
     return e, n
 
 
