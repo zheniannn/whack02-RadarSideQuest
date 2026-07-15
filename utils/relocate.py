@@ -1,4 +1,5 @@
-"""Stage 5b rules: relocate trajectories into the radar's neighbourhood.
+"""The SideQuest relocation, applied by stage 5: move trajectories into the
+radar's neighbourhood.
 
 WHACK01 produces GA trajectories all over the survey region. This variant
 rigidly translates EVERY trajectory so its FIRST point lands at a uniformly

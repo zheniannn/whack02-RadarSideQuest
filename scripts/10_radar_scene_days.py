@@ -35,7 +35,7 @@ DAY_COLORS = {
     "2022-06-20": "#8a4fbd",   # purple
     "2022-06-27": "#d1495b",   # crimson
 }
-SITE_NAME = "Phoenix/Mesa AZ (relocated set)"
+SITE_NAME = "Phoenix/Mesa AZ"
 
 CROSSINGS_DIR = get_beam_crossings_dir()
 PLOT_DIR = get_plot_dir()

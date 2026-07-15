@@ -4,7 +4,7 @@
 
 *S-band · fan-beam · Swerling-1 · derived link budget · a dense in-coverage stress test*
 
-A variant of [WHACK02-Radar](https://github.com/zheniannn/WHACK02-Radar). Same S-band radar, same physics, same progressive-complexity ladder — but a **stage 5b** first **rigidly translates every one of the ~82k WHACK01 trajectories** so its origin lands at a uniformly random point within **10 km** of the radar, preserving each flight's exact motion (speeds, turns, shape). The result is a **dense in-coverage scenario** where every flight originates near the site and fans outward.
+A variant of [WHACK02-Radar](https://github.com/zheniannn/WHACK02-Radar) whose **only** difference is one step folded into stage 5: it **rigidly translates every one of the ~82k WHACK01 trajectories** so its origin lands at a uniformly random point within **10 km** of the radar, preserving each flight's exact motion (speeds, turns, shape). Everything else — the S-band radar, the physics, stages 6–10 — is identical. The result is a **dense in-coverage scenario** where every flight originates near the site and fans outward.
 
 ![Relocated radar scene](docs/figures/1_radar_scene_all_days.png)
 
@@ -15,44 +15,39 @@ A variant of [WHACK02-Radar](https://github.com/zheniannn/WHACK02-Radar). Same S
 
 ## What's different from WHACK02-Radar
 
-Everything downstream of the trajectories is identical (the `utils/` radar code and stages 6–9 are copied verbatim). The variant adds exactly two things and isolates its data:
+Almost nothing — by design. Stages 6–10 and the entire `utils/` radar layer are **byte-identical** to WHACK02. The variant is exactly two things:
 
 | Piece | Role |
 |---|---|
-| `scripts/05b_relocate_trajectories.py` + `utils/relocate.py` | **The relocation** — rigid ENU translation of every trajectory so its first point is uniformly within 10 km of the radar; motion is translation-invariant, so speeds/turns/shape are preserved exactly |
-| `scripts/11_trajectory_gallery.py` | Data-driven KMeans clustering of trajectory *shapes* into flight archetypes |
-| `utils/io.py` | All outputs isolated under `active/sidequest/` and `plot/whack02-RadarSideQuest/` so nothing collides with WHACK02 |
+| the relocation step in `scripts/05_radar_scenario.py` (via `utils/relocate.py`) | **The one difference** — after freezing the scenario, stage 5 rigidly translates every trajectory so its first point is uniformly within 10 km of the radar; motion is translation-invariant, so speeds/turns/shape are preserved exactly |
+| `utils/io.py` | Outputs isolated under `active/sidequest/` and `plot/whack02-RadarSideQuest/` so nothing collides with WHACK02 |
 
-Stage 5 selects the site and builds the real-flight detection figures from the **original** trajectories (into a separate `beam_crossings_source` cache), since relocation happens afterwards in 5b; stages 6–9 then run on the relocated set.
+Stage 5 selects the site and builds the real-flight detection figures from the **original** trajectories (into a separate `beam_crossings_source` cache); the relocated set it writes is what stages 6–9 consume.
 
 ```mermaid
 flowchart LR
-    T["WHACK01 trajectories"] --> S5["stage 5<br/>S-band scenario"]
-    T --> R["stage 5b<br/>relocate origins &lt; 10 km"]
-    S5 --> R
-    R --> BC["beam-crossing cache<br/>(relocated)"]
+    T["WHACK01 trajectories"] --> S5["stage 5 · scenario<br/>+ relocate origins &lt; 10 km"]
+    S5 --> BC["beam-crossing cache<br/>(relocated)"]
     BC --> S6["6 · clean"] & S7["7 · +clutter/noise"] & S8["8 · horizon"] & S9["9 · full + 0 dB"]
 ```
 
 ## Quickstart
 
-Python ≥ 3.9 with `numpy`, `pandas`, `matplotlib`, `scikit-learn`:
+Python ≥ 3.9 with `numpy`, `pandas`, `matplotlib`:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Data root defaults to `data/` beside the repo (override with `WHACK_DATA_ROOT`); WHACK01's `active/trajectories_10s/` must be present. Then:
+Data root defaults to `data/` beside the repo (override with `WHACK_DATA_ROOT`); WHACK01's `active/trajectories_10s/` must be present. Then (identical to WHACK02, minus the relocation that stage 5 now does):
 
 ```bash
-python scripts/05_radar_scenario.py          # site + S-band link budget -> scenario.json + real-flight figures
-python scripts/05b_relocate_trajectories.py  # relocate every trajectory origin to within 10 km
+python scripts/05_radar_scenario.py          # site + link budget + RELOCATE origins + real-flight figures
 python scripts/06_trajectories_clean.py
 python scripts/07_trajectories_cluttered.py
 python scripts/08_trajectories_radar_equation.py
 python scripts/09_radar_equation_cluttered.py
-python scripts/10_radar_scene_days.py        # optional: relocated scene figures
-python scripts/11_trajectory_gallery.py      # optional: flight-shape gallery
+python scripts/10_radar_scene_days.py        # optional: scene figures
 ```
 
 Every stage ends with a validation gate (Pd vs the Swerling-1 closed form, false-alarm rate within 5σ) that raises on failure.
@@ -66,10 +61,6 @@ The real-flight detection figures (N118AT, outbound 8 → 200 km) illustrate the
 ![Echo vs distance](docs/figures/3_ascope_8db_distance.png)
 
 ![Flight track](docs/figures/3_flight_ppi.png)
-
-The flight shapes the relocation preserves (data-driven clustering across all four days):
-
-![Trajectory shape gallery](docs/figures/2_trajectory_shapes_gallery.png)
 
 ## The ladder, in figures (on the relocated set)
 
@@ -105,17 +96,14 @@ Detection matches WHACK02 (same radar), but the tracking limit is **lower** (36.
 ## Repository layout
 
 ```
-scripts/
-├── 05_radar_scenario.py               # site (source) + link budget -> scenario.json + real-flight figures
-├── 05b_relocate_trajectories.py       # relocate every trajectory origin to within 10 km
-├── 06..09_*.py                        # the ladder (identical to WHACK02, on the relocated set)
-├── 10_radar_scene_days.py             # relocated scene figures per day
-└── 11_trajectory_gallery.py           # flight-shape clustering gallery
+scripts/                             # 05..10 -- 06..10 are byte-identical to WHACK02
+├── 05_radar_scenario.py             # site + link budget + RELOCATE origins + real-flight figures
+├── 06..09_*.py                      # the ladder (identical to WHACK02, on the relocated set)
+└── 10_radar_scene_days.py           # scene figures per day (identical to WHACK02)
 utils/
 ├── io.py                # paths, isolated under active/sidequest & plot/whack02-RadarSideQuest
-├── relocate.py          # the rigid ENU relocation
-├── scenario.py          # the radar: S-band link budget, waveform, Swerling-1 (shared with WHACK02)
-├── geometry.py · beam_crossings.py · measurements.py · plots.py   # shared with WHACK02
+├── relocate.py          # the rigid ENU relocation (the one addition)
+├── scenario.py · geometry.py · beam_crossings.py · measurements.py · plots.py   # identical to WHACK02
 docs/figures/            # README images
 ```
 
@@ -125,7 +113,7 @@ docs/figures/            # README images
 <data root>/active/
 ├── trajectories_10s/                 # WHACK01 stage 4 output (read-only source)
 └── sidequest/
-    ├── trajectories_10s/             # stage 5b relocated set (stages 6-9 input)
+    ├── trajectories_10s/             # stage 5 relocated set (stages 6-9 input)
     └── radar/
         ├── scenario.json
         ├── beam_crossings/           # relocated-set cache (stages 6-9)

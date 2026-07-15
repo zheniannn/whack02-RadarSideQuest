@@ -1,22 +1,25 @@
-"""Stage 5 (RadarSideQuest): choose the radar site from ground-truth traffic
-density, freeze the full radar scenario (coverage, accuracy, S-band link
-budget, CFAR floor, clutter map) into scenario.json, and produce the
-data-derived detection figures for one real flight.
+"""Stage 5 (RadarSideQuest): identical to WHACK02-Radar's stage 5, plus the
+one thing that makes this the SideQuest -- it RELOCATES every trajectory so
+its origin lands within 10 km of the radar.
 
-Site selection and the detection figures use the ORIGINAL WHACK01
-trajectories (the same site and radar physics as WHACK02-Radar); the
-relocation to within 10 km of the site happens afterwards in stage 5b, and
-stages 6-9 run on that relocated set. The detection figures illustrate the
-radar's range physics on a real out-and-back flight, which is independent of
-the relocation, so they are built from the source set into a SEPARATE
-beam-crossing cache (beam_crossings_source) that never touches the relocated
-cache stages 6-9 use.
+It (1) chooses the radar site from ground-truth traffic density, (2) freezes
+the full radar scenario (coverage, accuracy, S-band link budget, CFAR floor,
+clutter map) into scenario.json, (3) rigidly translates every WHACK01
+trajectory so its first point lands within 10 km of the site (see
+utils/relocate.py) into the relocated set that stages 6-9 consume, and
+(4) produces the data-derived detection figures for one real flight.
 
-The reference flight is N118AT, a Piper PA-44-180 Seminole (icao24 a049fd),
-outbound 8 -> 200 km.
+Site selection and the detection figures use the ORIGINAL trajectories (the
+same site and radar physics as WHACK02-Radar); the detection figures
+illustrate the radar's range physics on a real out-and-back flight, which is
+independent of the relocation, so they are built from the source set into a
+SEPARATE beam-crossing cache (beam_crossings_source) that never touches the
+relocated cache stages 6-9 use. The reference flight is N118AT, a Piper
+PA-44-180 Seminole (icao24 a049fd), outbound 8 -> 200 km.
 
 Outputs:
   scenario.json
+  the relocated trajectory set (active/sidequest/trajectories_10s/)
   3_ascope_8db_distance.png / 3_ascope_5db_distance.png
       echo power vs range across the whole flight (mean radar-equation curve
       + per-scan Swerling draws, detected/missed) against the Exp(1) noise
@@ -46,8 +49,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.beam_crossings import discover_input_files, ensure_beam_crossings
 from utils.io import (
     get_plot_dir, get_radar_dir, get_scenario_path, get_source_trajectories_dir,
+    get_trajectories_dir,
 )
 from utils.plots import C_NOISE, C_TARGET, GRID, INK, INK2, MUTED
+from utils.relocate import RADIUS_M, relocate_day
 from utils.scenario import C_M_S, Scenario, generate_clutter_patches, select_site
 
 # Reference flight for the detection figures (from the source set).
@@ -204,6 +209,25 @@ def plot_flight_track(sc, a, out_path, floor_db=8.0):
     fig.savefig(out_path, dpi=150); plt.close(fig)
 
 
+def relocate_trajectories(sc, source_dir):
+    """The one SideQuest step: rigidly translate every trajectory so its first
+    point lands within RADIUS_M of the site, writing the relocated per-day set
+    that stages 6-9 consume (see utils/relocate.py). Motion is preserved
+    exactly -- only geographic placement changes."""
+    out_dir = get_trajectories_dir()
+    os.makedirs(out_dir, exist_ok=True)
+    files = sorted(f for f in os.listdir(source_dir)
+                   if f.startswith("states_") and f.endswith("_trajectories_10s.csv"))
+    print(f"\nrelocating every trajectory to start within {RADIUS_M / 1000:.0f} km of the site...")
+    for i, name in enumerate(files):
+        date = name.split("_")[1]
+        df = pd.read_csv(os.path.join(source_dir, name), dtype={"icao24": str, "callsign": str})
+        rng = np.random.default_rng(sc.seed + 5000 + i)   # reproducible, distinct stream
+        out, stats = relocate_day(df, sc.site_lat_deg, sc.site_lon_deg, sc.range_max_m, rng)
+        out.to_csv(os.path.join(out_dir, name), index=False)
+        print(f"  {date}: {stats['relocated']}/{stats['trajectories']} relocated -> {name}")
+
+
 def make_detection_figures(sc, input_dir):
     """Build the SOURCE beam-crossing cache and render the real-flight figures.
     Uses a dedicated cache dir so stages 6-9's relocated cache is untouched."""
@@ -287,6 +311,9 @@ def main() -> None:
         print(f"  {r_km:>5} km | {snr_db:>6.1f} dB | {float(sc.pd(r_km * 1000.0)):>10.3f}")
 
     print(f"\nscenario written to: {os.path.abspath(output_path)}")
+
+    # The SideQuest step: relocate every trajectory origin to within 10 km.
+    relocate_trajectories(sc, input_dir)
 
     if not args.no_figures:
         make_detection_figures(sc, input_dir)
