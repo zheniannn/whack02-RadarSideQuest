@@ -4,7 +4,7 @@
 
 *S-band · fan-beam · Swerling-1 · derived link budget · a dense in-coverage stress test*
 
-A variant of [WHACK02-Radar](https://github.com/zheniannn/WHACK02-Radar) whose **only** difference is one step folded into stage 5: it **rigidly translates every one of the ~82k WHACK01 trajectories** so its origin lands at a uniformly random point within **10 km** of the radar, preserving each flight's exact motion (speeds, turns, shape). Everything else — the S-band radar, the physics, stages 6–10 — is identical. The result is a **dense in-coverage scenario** where every flight originates near the site and fans outward.
+A variant of [WHACK02-Radar](https://github.com/zheniannn/WHACK02-Radar) whose **only** difference is one step folded into stage 5: it **rigidly translates every one of the ~82k WHACK01 trajectories** so its origin lands at a uniformly random point within **10 km** of the radar, preserving each flight's exact motion (speeds, turns, shape). Everything else — the S-band radar, the physics, stages 6–9 and the scene figures — is identical. The result is a **dense in-coverage scenario** where every flight originates near the site and fans outward.
 
 ![Relocated radar scene](docs/figures/1_radar_scene_all_days.png)
 
@@ -15,7 +15,7 @@ A variant of [WHACK02-Radar](https://github.com/zheniannn/WHACK02-Radar) whose *
 
 ## What's different from WHACK02-Radar
 
-Almost nothing — by design. Stages 6–10 and the entire `utils/` radar layer are **byte-identical** to WHACK02. The variant is exactly two things:
+Almost nothing — by design. Stages 6–9, the scene-figures script, and the entire `utils/` radar layer are **byte-identical** to WHACK02. The variant is exactly two things:
 
 | Piece | Role |
 |---|---|
@@ -47,7 +47,7 @@ python scripts/06_trajectories_clean.py
 python scripts/07_trajectories_cluttered.py
 python scripts/08_trajectories_radar_equation.py
 python scripts/09_radar_equation_cluttered.py
-python scripts/10_radar_scene_days.py        # optional: scene figures
+python scripts/radar_scene_days.py        # optional: scene figures
 ```
 
 Every stage ends with a validation gate (Pd vs the Swerling-1 closed form, false-alarm rate within 5σ) that raises on failure.
@@ -99,10 +99,10 @@ Detection matches WHACK02 (same radar), but the tracking limit is **lower** (36.
 ## Repository layout
 
 ```
-scripts/                             # 05..10 -- 06..10 are byte-identical to WHACK02
+scripts/                             # everything but 05 is byte-identical to WHACK02
 ├── 05_radar_scenario.py             # site + link budget + RELOCATE origins + real-flight figures
 ├── 06..09_*.py                      # the ladder (identical to WHACK02, on the relocated set)
-└── 10_radar_scene_days.py           # scene figures per day (identical to WHACK02)
+└── radar_scene_days.py              # scene figures per day (identical to WHACK02, auxiliary)
 utils/
 ├── io.py                # paths, isolated under active/sidequest & plot/whack02-RadarSideQuest
 ├── relocate.py          # the rigid ENU relocation (the one addition)
