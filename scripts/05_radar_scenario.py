@@ -20,7 +20,7 @@ PA-44-180 Seminole (icao24 a049fd), outbound 8 -> 200 km.
 Outputs:
   scenario.json
   the relocated trajectory set (active/sidequest/trajectories_10s/)
-  3_ascope_8db_distance.png / 3_ascope_5db_distance.png
+  3_ascope_8db_distance.png / 3_ascope_0db_distance.png
       echo power vs range across the whole flight (mean radar-equation curve
       + per-scan Swerling draws, detected/missed) against the Exp(1) noise
       floor, at each CFAR floor.
@@ -59,7 +59,7 @@ from utils.scenario import C_M_S, Scenario, generate_clutter_patches, select_sit
 FLIGHT_DATE = "2022-06-06"
 TRAJECTORY_ID = "a049fd_1654554529_r0"
 AIRCRAFT = "N118AT  Piper PA-44-180 Seminole"
-FLOORS_DB = (8.0, 5.0)
+FLOORS_DB = (8.0, 0.0)
 
 # Separate cache for the source-flight figures, so building it never poisons
 # the relocated beam-crossing cache that stages 6-9 rely on.
