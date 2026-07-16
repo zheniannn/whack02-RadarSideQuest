@@ -56,9 +56,12 @@ Every stage ends with a validation gate (Pd vs the Swerling-1 closed form, false
 
 A 2D fan-beam **S-band** surveillance radar (2.8 GHz, 10 s scan, 1–200 km, 150 m × 1.5° cells). The 15 dB operating anchor is **derived from an explicit link budget**: single-pulse SNR from `Pt·G²·λ²·σ / ((4π)³·R⁴·kT₀BF·L)` (15 kW, 34 dBi, B = 1 MHz, NF = 4 dB, solved loss ≈ 9.3 dB) → ~0 dB at 50 km, lifted ≈ 15 dB by coherent integration of ~31 pulses/dwell. Detection is Swerling-1: `Pfa = e^(−τ)`, `Pd = Pfa^(1/(1+SNR))`.
 
-The real-flight detection figures (N118AT, outbound 8 → 200 km) illustrate the range physics — relocation-independent, so built from the source flight:
+The real-flight detection figures (N118AT, outbound 8 → 200 km) illustrate the range physics — relocation-independent, so built from the source flight. Dropping the CFAR floor from 8 dB to 0 dB keeps the fading echo detectable much farther out, but floods the scope with noise crossings (≈9 → ≈1,840 of 5,000 cells):
 
-![Echo vs distance](docs/figures/3_ascope_8db_distance.png)
+<table><tr>
+<td width="50%" align="center"><b>8 dB CFAR floor</b><br><img src="docs/figures/3_ascope_8db_distance.png" alt="8 dB floor"></td>
+<td width="50%" align="center"><b>0 dB CFAR floor</b><br><img src="docs/figures/3_ascope_0db_distance.png" alt="0 dB floor"></td>
+</tr></table>
 
 ![Flight track](docs/figures/3_flight_ppi.png)
 
